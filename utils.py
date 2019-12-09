@@ -15,7 +15,32 @@ Experience = namedtuple(
 )
 
 
+def plot_2(scores, losses):
+    """
+    Plot total scores and mean losses over time
+    :param scores:
+    :param losses:
+    :return:
+    """
+    plt.figure(2)
+    plt.clf()
+    plt.title('Training...')
+    plt.xlabel('Episode')
+    plt.ylabel('Mean Score')
+    plt.plot(scores)
+    plt.plot(losses)
+    plt.pause(0.001)
+    print("Episode", len(scores), "\n Score:", scores[-1], "\n Loss:", losses[-1])
+    if is_ipython: display.clear_output(wait=True)
+
+
 def plot(values, moving_avg_period):
+    """
+    Default moving average plot
+    :param values:
+    :param moving_avg_period:
+    :return:
+    """
     plt.figure(2)
     plt.clf()
     plt.title('Training...')
@@ -53,7 +78,7 @@ def extract_tensors(experiences):
     return t1, t2, t3, t4
 
 
-class QValues():
+class QValues:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     @staticmethod
@@ -66,7 +91,7 @@ class QValues():
         non_final_state_locations = (final_state_locations == False)
         non_final_states = next_states[non_final_state_locations]
         batch_size = next_states.shape[0]
-        values = torch.zeros(batch_size) - 10
+        values = torch.zeros(batch_size)
         if len(non_final_states) > 0:
             with torch.no_grad():
                 values[non_final_state_locations] = target_net(non_final_states).max(dim=1)[0]

@@ -37,7 +37,7 @@ class DQN(nn.Module):
         return t.cpu()
 
 
-class ReplayMemory():
+class ReplayMemory:
     def __init__(self, capacity, batch_size):
         self.capacity = capacity
         self.memory = []
@@ -48,8 +48,8 @@ class ReplayMemory():
         if len(self.memory) < self.capacity:
             self.memory.append(experience)
         else:
-            self.memory[self.push_count % self.capacity] = experience
-        self.push_count += 1
+            self.memory[self.push_count] = experience
+        self.push_count = (self.push_count + 1) % self.capacity
 
     def sample(self):
         return random.sample(self.memory, self.batch_size)
@@ -58,7 +58,7 @@ class ReplayMemory():
         return len(self.memory) >= self.batch_size
 
 
-class EpsilonGreedyStrategy():
+class EpsilonGreedyStrategy:
     def __init__(self, start, end, decay):
         self.start = start
         self.end = end
@@ -69,7 +69,7 @@ class EpsilonGreedyStrategy():
                math.exp(-1. * current_step * self.decay)
 
 
-class Agent():
+class Agent:
     def __init__(self, strategy, num_actions, device, memory):
         self.current_step = 0
         self.strategy = strategy
@@ -79,7 +79,7 @@ class Agent():
 
     def select_action(self, state, policy_net, optimal=False):
         if optimal:
-            return policy_net(state).argmax(dim=1).to(self.device)
+            return self.select_optimal_action(state, policy_net)
 
         rate = self.strategy.get_exploration_rate(self.current_step)
         if self.memory.can_provide_sample():
@@ -89,15 +89,19 @@ class Agent():
             action = random.randrange(self.num_actions)
             return torch.tensor([action]).to(self.device)  # explore
         else:
-            with torch.no_grad():
-                return policy_net(state).argmax(dim=1).to(self.device)  # exploit
+            return self.select_optimal_action(state, policy_net)  # exploit
+
+    def select_optimal_action(self, state, policy_net):
+        with torch.no_grad():
+            return policy_net(state).argmax(dim=1).to(self.device)
 
 
 class EnvManager():
-    def __init__(self, environment, device):
+    def __init__(self, environment, device, k=4):
         self.device = device
         self.env = gym.make(environment).unwrapped
         self.env.reset()
+        self.k = k
         self.stack_screens = []
         self.done = False
 
@@ -115,38 +119,32 @@ class EnvManager():
         return self.env.action_space.n
 
     def take_action(self, action):
-        _, reward, self.done, _ = self.env.step(action.item())
-        return torch.tensor([reward])
+        rewards = []
+        # Skip frames and take the same actions for those being skipped
+        for _ in range(self.k - 1):
+            _, reward, self.done, _ = self.env.step(action.item())
+            rewards.append(reward)
+            if self.done:
+                break
+        return torch.tensor([np.asarray(rewards).sum()])
 
     def just_starting(self):
         return len(self.stack_screens) < 4
 
-    def get_state(self, skip_frame=False):
+    def get_state(self):
         if self.just_starting() or self.done:
+            # Produce a stack of 4 black screens
             self.stack_screens.append(self.get_processed_screen())
             black_screen = torch.zeros((1, 4, self.get_screen_width(), self.get_screen_height()))
             return black_screen
         else:
+            # Stack four frames
             result_screen = torch.zeros((4, self.get_screen_width(), self.get_screen_height()))
             for i in range(len(self.stack_screens)):
                 result_screen[i] = self.stack_screens[i]
-            if not skip_frame:
-                self.stack_screens.append(self.get_processed_screen())
+
+            self.stack_screens.append(self.get_processed_screen())
             return result_screen.unsqueeze(0)
-
-    def get_screen_height(self):
-        if len(self.stack_screens) == 0:
-            screen = self.get_processed_screen()
-            return screen.shape[1]
-        else:
-            return self.stack_screens[0].shape[1]
-
-    def get_screen_width(self):
-        if len(self.stack_screens) == 0:
-            screen = self.get_processed_screen()
-            return screen.shape[2]
-        else:
-            return self.stack_screens[0].shape[2]
 
     def get_processed_screen(self):
         screen = self.render('rgb_array').transpose((2, 0, 1))  # PyTorch expects CHW
@@ -175,8 +173,28 @@ class EnvManager():
 
         return resize(screen)  # add a batch dimension (BCHW)
 
-    def plot_screen(self):
-        screen = self.get_processed_screen().cpu()
+    def plot_screen(self, screen=None):
+        """
+        Plot the provided screen; otherwise plot the current processed screen
+        :param screen:
+        :return:
+        """
+        if screen is None:
+            screen = self.get_processed_screen().cpu()
         screen = screen.resize_(84, 84)
         plt.imshow(screen)
         plt.show()
+
+    def get_screen_height(self):
+        if len(self.stack_screens) == 0:
+            screen = self.get_processed_screen()
+            return screen.shape[1]
+        else:
+            return self.stack_screens[0].shape[1]
+
+    def get_screen_width(self):
+        if len(self.stack_screens) == 0:
+            screen = self.get_processed_screen()
+            return screen.shape[2]
+        else:
+            return self.stack_screens[0].shape[2]
