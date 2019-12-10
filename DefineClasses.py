@@ -16,25 +16,41 @@ class DQN(nn.Module):
     def __init__(self, num_actions, device='cpu'):
         super().__init__()
         self.device = device
+        img_height = 84
+        img_width = 84
+        #Convolutions
+        self.num_kernels1 = 32
+        self.conv1 = nn.Conv2d(in_channels=4, out_channels=self.num_kernels1, kernel_size=3, stride=1, padding=1) 
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.maxpool_output_size1 = int(self.num_kernels1 *int(img_height / 2) * int(img_width / 2))
 
-        # Convolutions
-        self.num_kernels1 = 16
-        self.conv1 = nn.Conv2d(4, self.num_kernels1, kernel_size=8, stride=4, padding=1)
-        self.num_kernels2 = 32
-        self.conv2 = nn.Conv2d(self.num_kernels1, self.num_kernels2, kernel_size=4, stride=2, padding=1)
+        #Fully Connected Layers with max pool
+        # self.fc1 = nn.Linear(in_features=self.maxpool_output_size1, out_features=24)
+        # self.out = nn.Linear(in_features=24, out_features=num_actions)
+
+        # #Fully Connected Layers with convoltional
+        # self.fc1 = nn.Linear(in_features=self.num_kernels1*img_height*img_width, out_features=24)   
+        # self.out = nn.Linear(in_features=24, out_features=num_actions)
 
         # Fully Connected Layers
-        self.fc1 = nn.Linear(in_features=self.num_kernels2 * 10 * 10, out_features=256)
-        self.out = nn.Linear(in_features=256, out_features=num_actions)
+        self.fc1 = nn.Linear(in_features=1*img_height*img_width, out_features=24)
+        self.out = nn.Linear(in_features=24, out_features=num_actions)
+
+
 
     def forward(self, t):
         t = t.to(self.device)
-        t = F.relu(self.conv1(t))
-        t = F.relu(self.conv2(t))
+
+        # t = self.conv1(t)
+        # t = self.pool1(t)
+        # t= F.relu(t)
+
         t = t.flatten(start_dim=1)
         t = F.relu(self.fc1(t))
         t = self.out(t)
-        return t.cpu()
+        return t
+        
+       
 
 
 class ReplayMemory:
@@ -51,8 +67,8 @@ class ReplayMemory:
             self.memory[self.push_count] = experience
         self.push_count = (self.push_count + 1) % self.capacity
 
-    def sample(self):
-        return random.sample(self.memory, self.batch_size)
+    def sample(self, percentage=1):
+        return random.sample(self.memory, int(self.batch_size*percentage))
 
     def can_provide_sample(self):
         return len(self.memory) >= self.batch_size
@@ -107,7 +123,7 @@ class EnvManager():
 
     def reset(self):
         self.env.reset()
-        self.stack_screens = deque(maxlen=4)
+        self.stack_screens = deque(maxlen=self.k)
 
     def close(self):
         self.env.close()
@@ -133,22 +149,30 @@ class EnvManager():
         return torch.tensor([np.asarray(rewards).sum()])
 
     def just_starting(self):
-        return len(self.stack_screens) < 4
+        return len(self.stack_screens) < self.k
 
     def get_state(self):
         if self.just_starting() or self.done:
             # Produce a stack of 4 black screens
             self.stack_screens.append(self.get_processed_screen())
-            black_screen = torch.zeros((1, 4, self.get_screen_width(), self.get_screen_height()))
+            black_screen = torch.zeros((1, 1, self.get_screen_width(), self.get_screen_height()))
             return black_screen
         else:
-            # Stack four frames
-            result_screen = torch.zeros((4, self.get_screen_width(), self.get_screen_height()))
-            for i in range(len(self.stack_screens)):
-                result_screen[i] = self.stack_screens[i]
+            # Stack four frames - 4 channel
+            # result_screen = torch.zeros((self.k, self.get_screen_width(), self.get_screen_height()))
+            # for i in range(len(self.stack_screens)):
+            #     result_screen[i] = self.stack_screens[i]
+
+            #Screen substraction test - 1 channel
+            result = self.stack_screens[0]
+            for i in range(1,len(self.stack_screens)):
+                result -= self.stack_screens[i]
 
             self.stack_screens.append(self.get_processed_screen())
-            return result_screen.unsqueeze(0)
+            return result.unsqueeze(0)
+
+            
+            # return result_screen.unsqueeze(0)
 
     def get_processed_screen(self):
         screen = self.render('rgb_array').transpose((2, 0, 1))  # PyTorch expects CHW
