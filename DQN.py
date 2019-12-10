@@ -26,32 +26,33 @@ class DQN(nn.Module):
     def __init__(self, img_height, img_width, num_actions):
         super().__init__()
 
-
-        self.activation_func = torch.nn.ReLU()
-
-
         #Convolutions
         self.num_kernels1 = 32
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=self.num_kernels1, kernel_size=3, stride=1, padding=1) 
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         self.maxpool_output_size1 = int(self.num_kernels1 *int(img_height / 2) * int(img_width / 2))
 
-        #Fully Connected Layers
-        self.fc1 = nn.Linear(in_features=self.maxpool_output_size1, out_features=24)   
-        self.fc2 = nn.Linear(in_features=24, out_features=32)
-        self.out = nn.Linear(in_features=32, out_features=num_actions)
+        #Fully Connected Layers with max pool
+        # self.fc1 = nn.Linear(in_features=self.maxpool_output_size1, out_features=24)
+        # self.out = nn.Linear(in_features=24, out_features=num_actions)
+
+        # #Fully Connected Layers with convoltional
+        # self.fc1 = nn.Linear(in_features=self.num_kernels1*img_height*img_width, out_features=24)   
+        # self.out = nn.Linear(in_features=24, out_features=num_actions)
+
+        # Fully Connected Layers
+        self.fc1 = nn.Linear(in_features=3*img_height*img_width, out_features=24)
+        self.out = nn.Linear(in_features=24, out_features=num_actions)
+
 
 
     def forward(self, t):
-        #TODO get convolution inputs correct
-
-        t = self.conv1(t)
-        t = self.pool1(t)
-        t= self.activation_func(t)
+        # t = self.conv1(t)
+        # t = self.pool1(t)
+        # t= F.relu(t)
 
         t = t.flatten(start_dim=1)
         t = F.relu(self.fc1(t))
-        t = F.relu(self.fc2(t))
         t = self.out(t)
         return t
 
@@ -162,9 +163,9 @@ class EnvManager():
         screen_height = screen.shape[1]
         
         # Strip off top and bottom
-        top = int(screen_height * 0.4)
-        bottom = int(screen_height * 0.8)
-        screen = screen[:, top:bottom, :]
+        # top = int(screen_height * 0.4)
+        # bottom = int(screen_height * 0.8)
+        # screen = screen[:, top:bottom, :]
         return screen
 
     def transform_screen_data(self, screen):       
@@ -172,14 +173,14 @@ class EnvManager():
         screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
         screen = torch.from_numpy(screen)
         
-        # Use torchvision package to compose image transforms
         resize = T.Compose([
             T.ToPILImage()
             ,T.Resize((40,90))
             ,T.ToTensor()
         ])
     
-        return resize(screen).unsqueeze(0).to(self.device) # add a batch dimension (BCHW)
+        #NCHW formating
+        return resize(screen).unsqueeze(0).to(self.device)) 
 
 def plot(values, moving_avg_period):
     plt.figure(2)
@@ -237,7 +238,7 @@ class QValues():
 
 
 if __name__ == "__main__":
-    environment = 'CartPole-v0'
+    environment = 'Breakout-v0'
 
     #Hyper parameters
     batch_size = 256
