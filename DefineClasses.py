@@ -119,10 +119,14 @@ class EnvManager():
         return self.env.action_space.n
 
     def take_action(self, action):
-        rewards = []
-        # Skip frames and take the same actions for those being skipped
+        _, reward, self.done, _ = self.env.step(action.item())
+        rewards = [reward]
+        # Skip frames and take the same actions for those being skipped (left or right)
         for _ in range(self.k - 1):
-            _, reward, self.done, _ = self.env.step(action.item())
+            if action.item() == 1:  # action Fire should just pick Noop
+                _, reward, self.done, _ = self.env.step(0)
+            else:
+                _, reward, self.done, _ = self.env.step(action.item())
             rewards.append(reward)
             if self.done:
                 break

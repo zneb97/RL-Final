@@ -7,7 +7,7 @@ from utils import *
 
 if __name__ == "__main__":
     environment = 'Breakout-v0'
-    batch_size = 2048
+    batch_size = 1024
     gamma = 0.95
     eps_start = 1
     eps_end = 0.1
@@ -25,6 +25,7 @@ if __name__ == "__main__":
     agent = Agent(strategy, em.num_actions_available(), device, memory)
 
     policy_net = DQN(em.num_actions_available(), device).to(device)
+    policy_net.load_state_dict(torch.load("breakout-v0-eps83.pth"))
     target_net = DQN(em.num_actions_available(), device).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
@@ -46,7 +47,6 @@ if __name__ == "__main__":
     #         em.plot_screen(s)
     #     state = next_state
 
-    # policy_net.load_state_dict(torch.load("breakout-v0-1d.pth"))
     for episode in range(num_episodes):
         em.reset()
         state = em.get_state()
@@ -77,13 +77,15 @@ if __name__ == "__main__":
                 losses.append(loss.item() * 1000)
 
             if em.done:
-                scores = np.asarray(scores).sum()
-                losses = np.asarray(losses).mean()
-                score_array.append(scores)
-                loss_array.append(losses)
-                plot_2(score_array, loss_array)
-                print(" Epsilon:", strategy.get_exploration_rate(agent.current_step))
-                print(" Memory len:", memory.push_count)
+                if memory.can_provide_sample():
+                    scores = np.asarray(scores).sum()
+                    losses = np.asarray(losses).mean()
+                    score_array.append(scores)
+                    loss_array.append(losses)
+                    print("Episode", episode)
+                    plot_2(score_array, loss_array)
+                    print(" Epsilon:", strategy.get_exploration_rate(agent.current_step))
+                    print(" Memory len:", memory.push_count)
                 break
 
         if episode % target_update == 0:
@@ -103,6 +105,6 @@ if __name__ == "__main__":
             scores.append(reward)
             state = em.get_state()
             if em.done:
-                print("Episode finished after {} timesteps with {} scores".format(t + 1, np.sum(scores)))
                 break
+        print("Episode finished after {} timesteps with {} scores".format(t + 1, np.sum(scores)))
     em.close()

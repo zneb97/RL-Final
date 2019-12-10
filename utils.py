@@ -30,7 +30,7 @@ def plot_2(scores, losses):
     plt.plot(scores)
     plt.plot(losses)
     plt.pause(0.001)
-    print("Episode", len(scores), "\n Score:", scores[-1], "\n Loss:", losses[-1])
+    print(" Score:", scores[-1], "\n Loss:", losses[-1])
     if is_ipython: display.clear_output(wait=True)
 
 
