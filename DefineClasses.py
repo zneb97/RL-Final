@@ -51,8 +51,10 @@ class ReplayMemory:
             self.memory[self.push_count] = experience
         self.push_count = (self.push_count + 1) % self.capacity
 
-    def sample(self):
-        return random.sample(self.memory, self.batch_size)
+    def sample(self, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+        return random.sample(self.memory, batch_size)
 
     def can_provide_sample(self):
         return len(self.memory) >= self.batch_size
@@ -96,7 +98,7 @@ class Agent:
             return policy_net(state).argmax(dim=1).to(self.device)
 
 
-class EnvManager():
+class EnvManager:
     def __init__(self, environment, device, k=4):
         self.device = device
         self.env = gym.make(environment).unwrapped
@@ -119,14 +121,14 @@ class EnvManager():
         return self.env.action_space.n
 
     def take_action(self, action):
-        _, reward, self.done, _ = self.env.step(action.item())
+        _, reward, self.done, _ = self.env.step(action)
         rewards = [reward]
         # Skip frames and take the same actions for those being skipped (left or right)
         for _ in range(self.k - 1):
-            if action.item() == 1:  # action Fire should just pick Noop
+            if action == 1:  # action Fire should just pick Noop
                 _, reward, self.done, _ = self.env.step(0)
             else:
-                _, reward, self.done, _ = self.env.step(action.item())
+                _, reward, self.done, _ = self.env.step(action)
             rewards.append(reward)
             if self.done:
                 break
@@ -136,13 +138,17 @@ class EnvManager():
         return len(self.stack_screens) < 4
 
     def get_state(self):
-        if self.just_starting() or self.done:
-            # Produce a stack of 4 black screens
+        if self.done:
             self.stack_screens.append(self.get_processed_screen())
             black_screen = torch.zeros((1, 4, self.get_screen_width(), self.get_screen_height()))
             return black_screen
         else:
-            # Stack four frames
+            if self.just_starting():
+                self.stack_screens.append(self.get_processed_screen())
+                self.stack_screens.append(self.get_processed_screen())
+                self.stack_screens.append(self.get_processed_screen())
+                self.stack_screens.append(self.get_processed_screen())
+
             result_screen = torch.zeros((4, self.get_screen_width(), self.get_screen_height()))
             for i in range(len(self.stack_screens)):
                 result_screen[i] = self.stack_screens[i]
