@@ -26,19 +26,29 @@ class DQN(nn.Module):
     def __init__(self, img_height, img_width, num_actions):
         super().__init__()
 
+
+        self.activation_func = torch.nn.ReLU()
+
+
         #Convolutions
         self.num_kernels1 = 32
-        self.conv1 = nn.Conv2d(img_height*img_width*3, self.num_kernels1, kernel_size=3, stride=1, padding=1) 
-        self.num_kernels2 = 64
-        self.conv2 = nn.Conv2d(32, self.num_kernels2, kernel_size=3, stride=1, padding=1)
-        
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=self.num_kernels1, kernel_size=3, stride=1, padding=1) 
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.maxpool_output_size1 = int(self.num_kernels1 *int(img_height / 2) * int(img_width / 2))
+
         #Fully Connected Layers
-        self.fc1 = nn.Linear(in_features=img_height*img_width*3, out_features=24)   
+        self.fc1 = nn.Linear(in_features=self.maxpool_output_size1, out_features=24)   
         self.fc2 = nn.Linear(in_features=24, out_features=32)
         self.out = nn.Linear(in_features=32, out_features=num_actions)
 
+
     def forward(self, t):
         #TODO get convolution inputs correct
+
+        t = self.conv1(t)
+        t = self.pool1(t)
+        t= self.activation_func(t)
+
         t = t.flatten(start_dim=1)
         t = F.relu(self.fc1(t))
         t = F.relu(self.fc2(t))
@@ -228,6 +238,8 @@ class QValues():
 
 if __name__ == "__main__":
     environment = 'CartPole-v0'
+
+    #Hyper parameters
     batch_size = 256
     gamma = 0.999
     eps_start = 1
@@ -238,24 +250,29 @@ if __name__ == "__main__":
     lr = 0.001
     num_episodes = 1000
 
+    #Enviroment setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     em = EnvManager(environment, device)
     strategy = EpsilonGreedyStrategy(eps_start, eps_end, eps_decay)
     agent = Agent(strategy, em.num_actions_available(), device)
     memory = ReplayMemory(memory_size)
 
+    #Network setup
     policy_net = DQN(em.get_screen_height(), em.get_screen_width(), em.num_actions_available()).to(device)
     target_net = DQN(em.get_screen_height(), em.get_screen_width(), em.num_actions_available()).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
     optimizer = optim.Adam(params=policy_net.parameters(), lr=lr)
 
+
     episode_durations = []
     for episode in range(num_episodes):
+        #Init start state of game
         em.reset()
         state = em.get_state()
 
         for timestep in count():
+            #Get and perform actions
             action = agent.select_action(state, policy_net)
             reward = em.take_action(action)
             next_state = em.get_state()
@@ -266,10 +283,12 @@ if __name__ == "__main__":
                 experiences = memory.sample(batch_size)
                 states, actions, rewards, next_states = extract_tensors(experiences)
                 
+                #Build Q-Value function (r + discount*Future)
                 current_q_values = QValues.get_current(policy_net, states, actions)
                 next_q_values = QValues.get_next(target_net, next_states)
                 target_q_values = (next_q_values * gamma) + rewards
 
+                #Compute loss 
                 loss = F.mse_loss(current_q_values, target_q_values.unsqueeze(1))
                 optimizer.zero_grad()
                 loss.backward()
