@@ -74,18 +74,22 @@ class EpsilonGreedyStrategy:
 class Agent:
     def __init__(self, strategy, num_actions, device, memory):
         self.current_step = 0
+        self.current_steps = np.asarray([])
         self.strategy = strategy
         self.num_actions = num_actions
         self.device = device
         self.memory = memory
 
-    def select_action(self, state, policy_net, optimal=False):
+    def select_action(self, state, policy_net, optimal=False, timestep=0):
         if optimal:
             return self.select_optimal_action(state, policy_net)
 
-        rate = self.strategy.get_exploration_rate(self.current_step)
+        if timestep >= len(self.current_steps):
+          self.current_steps = np.append(self.current_steps, 0)
+
+        rate = self.strategy.get_exploration_rate(self.current_steps[timestep])
         if self.memory.can_provide_sample():
-            self.current_step += 1
+            self.current_steps[:timestep] += 1
 
         if rate > random.random():
             action = random.randrange(self.num_actions)
@@ -122,17 +126,17 @@ class EnvManager:
 
     def take_action(self, action):
         _, reward, self.done, _ = self.env.step(action)
-        rewards = [reward]
+        rewards = reward
         # Skip frames and take the same actions for those being skipped (left or right)
         for _ in range(self.k - 1):
             if action == 1:  # action Fire should just pick Noop
                 _, reward, self.done, _ = self.env.step(0)
             else:
                 _, reward, self.done, _ = self.env.step(action)
-            rewards.append(reward)
+            rewards += reward
             if self.done:
                 break
-        return torch.tensor([np.asarray(rewards).sum()])
+        return torch.tensor([rewards])
 
     def just_starting(self):
         return len(self.stack_screens) < 4

@@ -10,14 +10,14 @@ if __name__ == "__main__":
     environment = 'Breakout-v0'
     batch_size = 256
     gamma = 0.99
-    eps_start = 0.1
+    eps_start = 1
     eps_end = 0.1
-    eps_decay = 0.001
+    eps_decay = 0.01
     target_update = 5
     memory_size = 100000
     lr = 0.001
     num_episodes = 500
-    k = 1  # of skipped frames
+    k = 4  # of skipped frames
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     em = EnvManager(environment, device, k=k)
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     agent = Agent(strategy, em.num_actions_available(), device, memory)
 
     policy_net = DQN(em.num_actions_available(), device).to(device)
-    policy_net.load_state_dict(torch.load("breakout-v0-beginning-test.pth"))
+    policy_net.load_state_dict(torch.load("breakout-v0-test13.pth"))
     target_net = DQN(em.num_actions_available(), device).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
@@ -95,18 +95,18 @@ if __name__ == "__main__":
 
     policy_net.eval()
     mean_score = 0
-    for episode in range(20):
+    for episode in range(200):
         em.reset()
         state = em.get_state()
 
         scores = []
-        for t in range(150):
+        for t in range(350):
             em.render()
-            action = agent.select_action(state, policy_net, optimal=True)
-            reward = em.take_action(action.item())
+            action = agent.select_action(state, policy_net, optimal=True, timestep=t).item()
+            reward = em.take_action(action)
             scores.append(reward)
             state = em.get_state()
-            # time.sleep(.05)
+            # time.sleep(.1)
             if em.done:
                 break
         print("Episode {} finished after {} timesteps with {} scores".format(episode, t + 1, np.sum(scores)))
