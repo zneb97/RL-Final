@@ -26,7 +26,7 @@ if __name__ == "__main__":
     agent = Agent(strategy, em.num_actions_available(), device, memory)
 
     policy_net = DQN(em.num_actions_available(), device).to(device)
-    policy_net.load_state_dict(torch.load("breakout-v0-test13.pth"))
+    # policy_net.load_state_dict(torch.load("breakout-v0-test19.pth"))
     target_net = DQN(em.num_actions_available(), device).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
